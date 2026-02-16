@@ -1,0 +1,215 @@
+/* =====================================================
+   Programmatic SEO - Frontend Styles
+   ===================================================== */
+
+/* Business List */
+.pseo-business-list {
+    margin: 20px 0;
+}
+
+.pseo-business-item {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.pseo-business-item h3 {
+    margin: 0 0 10px 0;
+    font-size: 20px;
+    color: #333;
+}
+
+.pseo-rating {
+    color: #f39c12;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.pseo-stars {
+    margin-right: 5px;
+}
+
+.pseo-address {
+    color: #666;
+    margin-bottom: 10px;
+    line-height: 1.6;
+}
+
+.pseo-address span {
+    display: block;
+}
+
+.pseo-phone {
+    margin-bottom: 10px;
+}
+
+.pseo-phone a {
+    color: #2271b1;
+    text-decoration: none;
+}
+
+.pseo-phone a:hover {
+    text-decoration: underline;
+}
+
+.pseo-description {
+    color: #555;
+    margin-bottom: 15px;
+    line-height: 1.6;
+}
+
+/* Action Buttons */
+.pseo-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.pseo-btn {
+    display: inline-block;
+    padding: 10px 20px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.pseo-btn-whatsapp {
+    background: #25d366;
+    color: #fff;
+}
+
+.pseo-btn-whatsapp:hover {
+    background: #128c7e;
+    color: #fff;
+}
+
+.pseo-btn-call {
+    background: #2271b1;
+    color: #fff;
+}
+
+.pseo-btn-call:hover {
+    background: #135e96;
+    color: #fff;
+}
+
+.pseo-btn-map {
+    background: #ea4335;
+    color: #fff;
+}
+
+.pseo-btn-map:hover {
+    background: #c53929;
+    color: #fff;
+}
+
+/* Map Container */
+.pseo-map {
+    width: 100%;
+    border-radius: 8px;
+    margin: 20px 0;
+}
+
+/* City Links */
+.pseo-city-links {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.pseo-city-links h4 {
+    margin: 0 0 15px 0;
+    color: #333;
+}
+
+.pseo-city-links ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 10px;
+}
+
+.pseo-city-links li {
+    margin: 0;
+}
+
+.pseo-city-links a {
+    color: #2271b1;
+    text-decoration: none;
+    display: block;
+    padding: 5px 0;
+}
+
+.pseo-city-links a:hover {
+    text-decoration: underline;
+}
+
+/* Footer Links */
+.pseo-footer-links {
+    background: #f0f0f1;
+    border-top: 1px solid #c3c4c7;
+    padding: 30px 0;
+    margin-top: 40px;
+}
+
+.pseo-footer-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.pseo-footer-links h4 {
+    margin: 0 0 15px 0;
+    color: #333;
+}
+
+.pseo-footer-cities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.pseo-footer-cities a {
+    display: inline-block;
+    padding: 5px 15px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 20px;
+    color: #2271b1;
+    text-decoration: none;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.pseo-footer-cities a:hover {
+    background: #2271b1;
+    color: #fff;
+    border-color: #2271b1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .pseo-actions {
+        flex-direction: column;
+    }
+    
+    .pseo-btn {
+        text-align: center;
+    }
+    
+    .pseo-city-links ul {
+        grid-template-columns: 1fr;
+    }
+    
+    .pseo-footer-cities {
+        justify-content: center;
+    }
+}

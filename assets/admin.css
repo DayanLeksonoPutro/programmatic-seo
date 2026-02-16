@@ -1,0 +1,95 @@
+/* =====================================================
+   Programmatic SEO - Admin Styles
+   ===================================================== */
+
+/* Dashboard Stats */
+.pseo-dashboard-stats {
+    display: flex;
+    gap: 20px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+}
+
+.pseo-stat-box {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    padding: 20px;
+    border-radius: 4px;
+    min-width: 200px;
+    text-align: center;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.pseo-stat-box h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #646970;
+    text-transform: uppercase;
+}
+
+.pseo-stat-number {
+    font-size: 32px;
+    font-weight: bold;
+    color: #2271b1;
+    margin: 0;
+}
+
+/* Service Info & Shortcode Info */
+.pseo-service-info,
+.pseo-shortcode-info {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 4px;
+}
+
+.pseo-service-info h2,
+.pseo-shortcode-info h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #c3c4c7;
+}
+
+.pseo-shortcode-info code {
+    background: #f0f0f1;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+/* Filter Form */
+.pseo-filter-form {
+    margin: 20px 0;
+    padding: 15px;
+    background: #f0f0f1;
+    border-radius: 4px;
+}
+
+.pseo-filter-form select {
+    margin-right: 10px;
+    min-width: 200px;
+}
+
+/* Form Tables */
+.form-table th {
+    width: 200px;
+}
+
+/* Notices */
+.notice {
+    margin: 20px 0;
+}
+
+/* WP List Table Enhancements */
+.wp-list-table .column-actions {
+    width: 120px;
+}
+
+/* Sitemap Page */
+pre {
+    background: #f0f0f1;
+    padding: 15px;
+    border-radius: 4px;
+    overflow-x: auto;
+}
