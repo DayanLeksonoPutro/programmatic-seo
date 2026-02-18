@@ -78,4 +78,51 @@ jQuery(document).ready(function($) {
         $(this).val(val);
     });
     
+    // Check for duplicate posts when generating
+    $('#pseo-check-duplicate').on('click', function(e) {
+        e.preventDefault();
+        
+        var citySlug = $('#city_slug').val();
+        
+        if (!citySlug) {
+            alert('Please enter a city slug first');
+            return;
+        }
+        
+        $.ajax({
+            url: pseo_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'pseo_check_duplicate_post',
+                nonce: pseo_ajax.nonce,
+                city_slug: citySlug
+            },
+            success: function(response) {
+                if (response.success) {
+                    if (response.data.exists) {
+                        var message = 'Post already exists!\n\n';
+                        message += 'Title: ' + response.data.post_title + '\n';
+                        message += 'Status: ' + response.data.post_status + '\n\n';
+                        message += 'What would you like to do?';
+                        
+                        if (confirm(message)) {
+                            window.open(response.data.edit_url, '_blank');
+                        }
+                    } else {
+                        alert('✓ No duplicate found. You can safely create this post.');
+                    }
+                }
+            }
+        });
+    });
+    
+    // CSV import validation
+    $('input[name="csv_file"]').on('change', function() {
+        var file = this.files[0];
+        if (file && file.size > 2 * 1024 * 1024) {
+            alert('File size too large. Maximum 2MB allowed.');
+            this.value = '';
+        }
+    });
+    
 });

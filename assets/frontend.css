@@ -195,6 +195,62 @@
     border-color: #2271b1;
 }
 
+/* FAQ Section */
+.pseo-faq-section {
+    margin: 30px 0;
+    padding: 20px;
+    background: #f9f9f9;
+    border-radius: 8px;
+}
+
+.pseo-faq-section h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: #333;
+}
+
+.pseo-faq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.pseo-faq-item {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.pseo-faq-item h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: #2271b1;
+}
+
+.pseo-faq-item div[itemprop="text"] {
+    color: #555;
+    line-height: 1.6;
+}
+
+/* Map Fallback */
+.pseo-map-fallback {
+    text-align: center;
+}
+
+.pseo-map-fallback h4 {
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.pseo-map-business-item {
+    transition: all 0.3s ease;
+}
+
+.pseo-map-business-item:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .pseo-actions {

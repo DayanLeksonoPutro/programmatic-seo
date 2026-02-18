@@ -47,6 +47,7 @@ class Programmatic_SEO {
         add_shortcode('local_business', array($this, 'shortcode_local_business'));
         add_shortcode('business_map', array($this, 'shortcode_business_map'));
         add_shortcode('city_links', array($this, 'shortcode_city_links'));
+        add_shortcode('faq_schema', array($this, 'shortcode_faq_schema'));
         
         // Frontend hooks
         add_action('wp_enqueue_scripts', array($this, 'frontend_scripts'));
@@ -58,6 +59,9 @@ class Programmatic_SEO {
         // AJAX handlers
         add_action('wp_ajax_pseo_get_cities', array($this, 'ajax_get_cities'));
         add_action('wp_ajax_pseo_get_businesses', array($this, 'ajax_get_businesses'));
+        add_action('wp_ajax_pseo_import_businesses_csv', array($this, 'ajax_import_businesses_csv'));
+        add_action('wp_ajax_pseo_check_duplicate_post', array($this, 'ajax_check_duplicate_post'));
+        add_action('wp_ajax_pseo_save_template', array($this, 'ajax_save_template'));
         
         // REST API
         add_action('rest_api_init', array($this, 'register_rest_routes'));
@@ -241,6 +245,24 @@ class Programmatic_SEO {
             'manage_options',
             'pseo-settings',
             array($this, 'page_settings')
+        );
+        
+        add_submenu_page(
+            'programmatic-seo',
+            'Import CSV',
+            'Import CSV',
+            'manage_options',
+            'pseo-import',
+            array($this, 'page_import_csv')
+        );
+        
+        add_submenu_page(
+            'programmatic-seo',
+            'Templates',
+            'Content Templates',
+            'manage_options',
+            'pseo-templates',
+            array($this, 'page_templates')
         );
     }
     
@@ -853,6 +875,253 @@ class Programmatic_SEO {
     }
     
     // =====================================================
+    // PAGE: Import CSV
+    // =====================================================
+    public function page_import_csv() {
+        global $wpdb;
+        
+        $message = '';
+        $error = '';
+        
+        if (isset($_POST['pseo_import_csv']) && !empty($_FILES['csv_file']['tmp_name'])) {
+            check_admin_referer('pseo_import_csv');
+            
+            $file = $_FILES['csv_file']['tmp_name'];
+            $handle = fopen($file, 'r');
+            
+            if ($handle) {
+                $header = fgetcsv($handle, 0, ',');
+                $imported = 0;
+                $failed = 0;
+                $duplicates = 0;
+                
+                while (($data = fgetcsv($handle, 0, ',')) !== false) {
+                    $row = array_combine($header, $data);
+                    
+                    // Validate required fields
+                    if (empty($row['city_slug']) || empty($row['name'])) {
+                        $failed++;
+                        continue;
+                    }
+                    
+                    // Get city_id
+                    $city = $wpdb->get_row($wpdb->prepare(
+                        "SELECT id FROM {$wpdb->prefix}cities WHERE city_slug = %s",
+                        sanitize_title($row['city_slug'])
+                    ));
+                    
+                    if (!$city) {
+                        $failed++;
+                        continue;
+                    }
+                    
+                    // Check for duplicate (same name + city)
+                    $existing = $wpdb->get_var($wpdb->prepare(
+                        "SELECT id FROM {$wpdb->prefix}businesses 
+                         WHERE city_id = %d AND name = %s",
+                        $city->id,
+                        sanitize_text_field($row['name'])
+                    ));
+                    
+                    if ($existing) {
+                        $duplicates++;
+                        continue;
+                    }
+                    
+                    // Insert business
+                    $result = $wpdb->insert(
+                        $wpdb->prefix . 'businesses',
+                        array(
+                            'city_id' => $city->id,
+                            'name' => sanitize_text_field($row['name']),
+                            'address' => sanitize_textarea_field($row['address'] ?? ''),
+                            'phone' => sanitize_text_field($row['phone'] ?? ''),
+                            'whatsapp' => sanitize_text_field($row['whatsapp'] ?? ''),
+                            'rating' => floatval($row['rating'] ?? 0),
+                            'lat' => sanitize_text_field($row['lat'] ?? ''),
+                            'lng' => sanitize_text_field($row['lng'] ?? ''),
+                            'description' => sanitize_textarea_field($row['description'] ?? ''),
+                            'website' => esc_url_raw($row['website'] ?? ''),
+                            'is_active' => isset($row['is_active']) ? intval($row['is_active']) : 1
+                        )
+                    );
+                    
+                    if ($result) {
+                        $imported++;
+                    } else {
+                        $failed++;
+                    }
+                }
+                
+                fclose($handle);
+                $message = "Import complete: {$imported} imported, {$duplicates} duplicates skipped, {$failed} failed.";
+            }
+        }
+        
+        // Generate sample CSV
+        $sample_csv = "city_slug,name,address,phone,whatsapp,rating,lat,lng,description,website,is_active\n";
+        $sample_csv .= "bondowoso,AC Bondowoso Sejahtera,Jl. A Yani No. 45,0332-123456,6281234567890,4.5,-7.913459,113.821059,Service AC profesional,https://example.com,1\n";
+        $sample_csv .= "jember,Service AC Jember Utama,Jl. Gajah Mada No. 123,0331-345678,6281234567892,4.7,-8.172119,113.699323,Service AC terpercaya,,1";
+        ?>
+        <div class="wrap">
+            <h1>Import Businesses from CSV</h1>
+            
+            <?php if ($message) : ?>
+            <div class="notice notice-success"><p><?php echo esc_html($message); ?></p></div>
+            <?php endif; ?>
+            
+            <?php if ($error) : ?>
+            <div class="notice notice-error"><p><?php echo esc_html($error); ?></p></div>
+            <?php endif; ?>
+            
+            <div class="pseo-import-section">
+                <h2>Upload CSV File</h2>
+                <form method="post" enctype="multipart/form-data">
+                    <?php wp_nonce_field('pseo_import_csv'); ?>
+                    <table class="form-table">
+                        <tr>
+                            <th><label for="csv_file">CSV File</label></th>
+                            <td>
+                                <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+                                <p class="description">Upload CSV file with business data. Maximum file size: <?php echo ini_get('upload_max_filesize'); ?></p>
+                            </td>
+                        </tr>
+                    </table>
+                    <?php submit_button('Import CSV', 'primary', 'pseo_import_csv'); ?>
+                </form>
+            </div>
+            
+            <div class="pseo-csv-template">
+                <h2>CSV Template</h2>
+                <p>Required columns: <code>city_slug</code>, <code>name</code></p>
+                <p>Optional columns: <code>address</code>, <code>phone</code>, <code>whatsapp</code>, <code>rating</code>, <code>lat</code>, <code>lng</code>, <code>description</code>, <code>website</code>, <code>is_active</code></p>
+                
+                <h3>Sample CSV Format:</h3>
+                <pre style="background: #f0f0f1; padding: 15px; overflow-x: auto;"><?php echo esc_html($sample_csv); ?></pre>
+                
+                <p>
+                    <a href="data:text/csv;charset=utf-8,<?php echo urlencode($sample_csv); ?>" 
+                       download="pseo_businesses_template.csv" 
+                       class="button">Download Sample CSV</a>
+                </p>
+            </div>
+            
+            <div class="pseo-csv-instructions">
+                <h2>Instructions</h2>
+                <ol>
+                    <li>Download the sample CSV template above</li>
+                    <li>Fill in your business data following the format</li>
+                    <li>Save as CSV (Comma Separated Values)</li>
+                    <li>Upload using the form above</li>
+                </ol>
+                <p><strong>Note:</strong> Duplicate entries (same name in same city) will be automatically skipped.</p>
+            </div>
+        </div>
+        <?php
+    }
+    
+    // =====================================================
+    // PAGE: Content Templates
+    // =====================================================
+    public function page_templates() {
+        if (isset($_POST['pseo_save_template'])) {
+            check_admin_referer('pseo_templates');
+            
+            update_option('pseo_template_opening', wp_kses_post($_POST['template_opening']));
+            update_option('pseo_template_why_section', wp_kses_post($_POST['template_why_section']));
+            update_option('pseo_template_tips_section', wp_kses_post($_POST['template_tips_section']));
+            update_option('pseo_template_closing', wp_kses_post($_POST['template_closing']));
+            update_option('pseo_template_faq_enabled', isset($_POST['faq_enabled']) ? 1 : 0);
+            
+            echo '<div class="notice notice-success"><p>Templates saved successfully!</p></div>';
+        }
+        
+        $template_opening = get_option('pseo_template_opening', $this->get_default_template_opening());
+        $template_why = get_option('pseo_template_why_section', $this->get_default_template_why());
+        $template_tips = get_option('pseo_template_tips_section', $this->get_default_template_tips());
+        $template_closing = get_option('pseo_template_closing', $this->get_default_template_closing());
+        $faq_enabled = get_option('pseo_template_faq_enabled', true);
+        ?>
+        <div class="wrap">
+            <h1>Content Templates</h1>
+            <p>Customize the content structure for auto-generated posts. Use placeholders: <code>{city_name}</code>, <code>{service_name}</code>, <code>{province}</code></p>
+            
+            <form method="post">
+                <?php wp_nonce_field('pseo_templates'); ?>
+                
+                <table class="form-table">
+                    <tr>
+                        <th><label for="template_opening">Opening Paragraph Template</label></th>
+                        <td>
+                            <textarea id="template_opening" name="template_opening" rows="5" class="large-text"><?php echo esc_textarea($template_opening); ?></textarea>
+                            <p class="description">This appears at the beginning of each post.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="template_why_section">"Why Choose" Section</label></th>
+                        <td>
+                            <textarea id="template_why_section" name="template_why_section" rows="5" class="large-text"><?php echo esc_textarea($template_why); ?></textarea>
+                            <p class="description">Content for "Kenapa memilih {service_name} di {city_name}?" section.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="template_tips_section">"Tips" Section</label></th>
+                        <td>
+                            <textarea id="template_tips_section" name="template_tips_section" rows="5" class="large-text"><?php echo esc_textarea($template_tips); ?></textarea>
+                            <p class="description">Content for "Tips memilih {service_name} terpercaya" section.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="template_closing">Closing Paragraph Template</label></th>
+                        <td>
+                            <textarea id="template_closing" name="template_closing" rows="5" class="large-text"><?php echo esc_textarea($template_closing); ?></textarea>
+                            <p class="description">This appears at the end of each post.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="faq_enabled">Enable FAQ Section</label></th>
+                        <td>
+                            <input type="checkbox" id="faq_enabled" name="faq_enabled" <?php checked($faq_enabled); ?>>
+                            <span class="description">Automatically add FAQ schema to generated posts</span>
+                        </td>
+                    </tr>
+                </table>
+                
+                <?php submit_button('Save Templates', 'primary', 'pseo_save_template'); ?>
+            </form>
+        </div>
+        <?php
+    }
+    
+    private function get_default_template_opening() {
+        return 'Mencari {service_name} terpercaya di {city_name}? Kami hadir untuk membantu Anda menemukan penyedia jasa terbaik di kota ini. Dengan berbagai pilihan layanan berkualitas, Anda dapat dengan mudah menemukan solusi yang sesuai dengan kebutuhan Anda.';
+    }
+    
+    private function get_default_template_why() {
+        return '{city_name} memiliki berbagai penyedia jasa {service_name} yang berkualitas. Berikut adalah beberapa alasan mengapa Anda harus memilih layanan di kota ini:
+
+Teknisi berpengalaman dan tersertifikasi
+Harga kompetitif dan transparan
+Layanan cepat dan responsif
+Garansi pelayanan terbaik
+Tersedia layanan darurat 24 jam';
+    }
+    
+    private function get_default_template_tips() {
+        return 'Untuk mendapatkan layanan terbaik, perhatikan tips berikut saat memilih penyedia jasa:
+
+Periksa review dan rating dari pelanggan sebelumnya
+Pastikan teknisi memiliki sertifikasi resmi
+Tanyakan tentang garansi yang diberikan
+Bandingkan harga dari beberapa penyedia jasa
+Pilih yang menawarkan layanan purna jual';
+    }
+    
+    private function get_default_template_closing() {
+        return 'Demikian informasi tentang {service_name} di {city_name}. Semoga daftar di atas dapat membantu Anda menemukan layanan terbaik. Jangan ragu untuk menghubungi penyedia jasa yang terdaftar untuk mendapatkan penawaran terbaik.';
+    }
+    
+    // =====================================================
     // SHORTCODE: [local_business]
     // =====================================================
     public function shortcode_local_business($atts) {
@@ -996,9 +1265,39 @@ class Programmatic_SEO {
             return '<p>No businesses with location data found.</p>';
         }
         
+        $api_key = get_option('pseo_google_maps_api');
         $map_id = 'pseo-map-' . uniqid();
         
         ob_start();
+        
+        // FALLBACK: If no API key, show static map links
+        if (empty($api_key)) {
+            ?>
+            <div class="pseo-map-fallback" style="height: <?php echo esc_attr($height); ?>; background: #f5f5f5; border: 2px dashed #ddd; border-radius: 8px; padding: 20px; text-align: center;">
+                <h4>Peta Lokasi Bisnis di <?php echo esc_html($city->city_name); ?></h4>
+                <div class="pseo-map-businesses" style="margin-top: 15px;">
+                    <?php foreach ($businesses as $business) : ?>
+                    <div class="pseo-map-business-item" style="background: #fff; padding: 15px; margin: 10px 0; border-radius: 5px; text-align: left;">
+                        <strong><?php echo esc_html($business->name); ?></strong><br>
+                        <?php if ($business->address) : ?>
+                        <small><?php echo esc_html($business->address); ?></small><br>
+                        <?php endif; ?>
+                        <a href="https://www.google.com/maps?q=<?php echo esc_attr($business->lat); ?>,<?php echo esc_attr($business->lng); ?>" 
+                           target="_blank" class="pseo-btn pseo-btn-map" style="margin-top: 8px; display: inline-block;">
+                            Lihat di Google Maps
+                        </a>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <p style="margin-top: 15px; font-size: 12px; color: #666;">
+                    <em>Untuk tampilan peta interaktif, silakan tambahkan Google Maps API Key di <a href="<?php echo admin_url('admin.php?page=pseo-settings'); ?>">Settings</a></em>
+                </p>
+            </div>
+            <?php
+            return ob_get_clean();
+        }
+        
+        // Google Maps with API Key
         ?>
         <div id="<?php echo esc_attr($map_id); ?>" class="pseo-map" style="height: <?php echo esc_attr($height); ?>"></div>
         
@@ -1088,6 +1387,137 @@ class Programmatic_SEO {
         </div>
         <?php
         return ob_get_clean();
+    }
+    
+    // =====================================================
+    // SHORTCODE: [faq_schema]
+    // =====================================================
+    public function shortcode_faq_schema($atts, $content = null) {
+        $atts = shortcode_atts(array(
+            'title' => 'Pertanyaan yang Sering Diajukan',
+            'city' => ''
+        ), $atts, 'faq_schema');
+        
+        $city_slug = sanitize_title($atts['city']);
+        $service_name = get_option('pseo_service_name', 'Jasa AC');
+        
+        // Get city name if provided
+        $city_name = '';
+        if ($city_slug) {
+            global $wpdb;
+            $city = $wpdb->get_row($wpdb->prepare(
+                "SELECT city_name FROM {$wpdb->prefix}cities WHERE city_slug = %s",
+                $city_slug
+            ));
+            if ($city) {
+                $city_name = $city->city_name;
+            }
+        }
+        
+        // Default FAQs
+        $faqs = array(
+            array(
+                'question' => "Berapa harga {$service_name} di " . ($city_name ?: 'kota ini') . "?",
+                'answer' => "Harga {$service_name} bervariasi tergantung jenis layanan dan kerusakan. Rata-rata harga mulai dari Rp 50.000 - Rp 500.000. Silakan hubungi penyedia jasa untuk estimasi harga yang lebih akurat."
+            ),
+            array(
+                'question' => "Berapa lama waktu pengerjaan {$service_name}?",
+                'answer' => "Waktu pengerjaan umumnya 1-3 jam tergantung tingkat kerumitan. Untuk perbaikan ringan bisa selesai dalam 30 menit, sedangkan untuk instalasi baru atau perbaikan berat bisa memakan waktu lebih lama."
+            ),
+            array(
+                'question' => "Apakah ada garansi untuk layanan {$service_name}?",
+                'answer' => "Ya, sebagian besar penyedia jasa di " . ($city_name ?: 'kota ini') . " memberikan garansi 7-30 hari tergantung jenis layanan. Pastikan untuk menanyakan ketentuan garansi sebelum menggunakan jasa."
+            ),
+            array(
+                'question' => "Bagaimana cara memesan layanan {$service_name}?",
+                'answer' => "Anda bisa memesan layanan dengan menghubungi nomor WhatsApp atau telepon yang tertera di daftar penyedia jasa di atas. Beberapa penyedia juga menerima pemesanan melalui aplikasi atau website."
+            ),
+            array(
+                'question' => "Apakah tersedia layanan darurat 24 jam?",
+                'answer' => "Ya, beberapa penyedia jasa di " . ($city_name ?: 'kota ini') . " menyediakan layanan darurat 24 jam. Silakan cek informasi masing-masing penyedia atau hubungi mereka langsung untuk konfirmasi ketersediaan."
+            )
+        );
+        
+        // Allow custom FAQs via content
+        if ($content) {
+            $custom_faqs = $this->parse_faq_content($content);
+            if (!empty($custom_faqs)) {
+                $faqs = $custom_faqs;
+            }
+        }
+        
+        // Generate Schema
+        $schema = array(
+            '@context' => 'https://schema.org',
+            '@type' => 'FAQPage',
+            'mainEntity' => array()
+        );
+        
+        foreach ($faqs as $faq) {
+            $schema['mainEntity'][] = array(
+                '@type' => 'Question',
+                'name' => $faq['question'],
+                'acceptedAnswer' => array(
+                    '@type' => 'Answer',
+                    'text' => $faq['answer']
+                )
+            );
+        }
+        
+        // Output HTML + Schema
+        ob_start();
+        ?>
+        <div class="pseo-faq-section">
+            <h2><?php echo esc_html($atts['title']); ?></h2>
+            <div class="pseo-faq-list">
+                <?php foreach ($faqs as $index => $faq) : ?>
+                <div class="pseo-faq-item" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+                    <h3 itemprop="name"><?php echo esc_html($faq['question']); ?></h3>
+                    <div itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+                        <div itemprop="text">
+                            <?php echo esc_html($faq['answer']); ?>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        
+        <script type="application/ld+json">
+        <?php echo wp_json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>
+        </script>
+        <?php
+        return ob_get_clean();
+    }
+    
+    private function parse_faq_content($content) {
+        $faqs = array();
+        $lines = explode("\n", trim($content));
+        $current_q = '';
+        $current_a = '';
+        
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line)) continue;
+            
+            if (strpos($line, 'Q:') === 0 || strpos($line, 'Question:') === 0) {
+                if ($current_q && $current_a) {
+                    $faqs[] = array('question' => $current_q, 'answer' => $current_a);
+                }
+                $current_q = trim(substr($line, strpos($line, ':') + 1));
+                $current_a = '';
+            } elseif (strpos($line, 'A:') === 0 || strpos($line, 'Answer:') === 0) {
+                $current_a = trim(substr($line, strpos($line, ':') + 1));
+            } elseif ($current_a !== '') {
+                $current_a .= ' ' . $line;
+            }
+        }
+        
+        if ($current_q && $current_a) {
+            $faqs[] = array('question' => $current_q, 'answer' => $current_a);
+        }
+        
+        return $faqs;
     }
     
     // =====================================================
@@ -1413,10 +1843,44 @@ class Programmatic_SEO {
         $service_slug = get_option('pseo_service_slug', 'jasa-ac');
         $province = get_option('pseo_province', 'Jawa Timur');
         
-        // Check if post already exists
+        // ADVANCED DUPLICATE DETECTION
         $existing = get_page_by_path($service_slug . '-' . $city_slug, OBJECT, 'page');
         if ($existing) {
-            return new WP_Error('post_exists', 'Post already exists for ' . $city_slug, array('status' => 409));
+            return new WP_Error(
+                'post_exists', 
+                'Post already exists for ' . $city_slug . ' (ID: ' . $existing->ID . ', Status: ' . $existing->post_status . ')', 
+                array(
+                    'status' => 409,
+                    'post_id' => $existing->ID,
+                    'post_status' => $existing->post_status,
+                    'edit_url' => get_edit_post_link($existing->ID, 'raw'),
+                    'view_url' => get_permalink($existing->ID)
+                )
+            );
+        }
+        
+        // Also check by meta
+        $existing_by_meta = get_posts(array(
+            'post_type' => 'page',
+            'meta_key' => '_pseo_city_slug',
+            'meta_value' => $city_slug,
+            'posts_per_page' => 1,
+            'post_status' => array('publish', 'draft', 'pending', 'future')
+        ));
+        
+        if (!empty($existing_by_meta)) {
+            $existing = $existing_by_meta[0];
+            return new WP_Error(
+                'post_exists_meta', 
+                'Post already exists for ' . $city_slug . ' (ID: ' . $existing->ID . ')', 
+                array(
+                    'status' => 409,
+                    'post_id' => $existing->ID,
+                    'post_status' => $existing->post_status,
+                    'edit_url' => get_edit_post_link($existing->ID, 'raw'),
+                    'view_url' => get_permalink($existing->ID)
+                )
+            );
         }
         
         // Build content
@@ -1451,6 +1915,8 @@ class Programmatic_SEO {
         update_post_meta($post_id, '_pseo_city_id', $city->id);
         update_post_meta($post_id, '_pseo_city_slug', $city_slug);
         update_post_meta($post_id, '_pseo_is_generated', true);
+        update_post_meta($post_id, '_pseo_generated_at', current_time('mysql'));
+        update_post_meta($post_id, '_pseo_service_slug', $service_slug);
         
         return array(
             'post_id' => $post_id,
@@ -1458,12 +1924,77 @@ class Programmatic_SEO {
         );
     }
     
+    // =====================================================
+    // AJAX HANDLERS
+    // =====================================================
+    public function ajax_check_duplicate_post() {
+        check_ajax_referer('pseo_nonce', 'nonce');
+        
+        $city_slug = sanitize_title($_POST['city_slug']);
+        $service_slug = get_option('pseo_service_slug', 'jasa-ac');
+        
+        // Check if post exists
+        $existing = get_page_by_path($service_slug . '-' . $city_slug, OBJECT, 'page');
+        
+        if ($existing) {
+            wp_send_json_success(array(
+                'exists' => true,
+                'post_id' => $existing->ID,
+                'post_title' => $existing->post_title,
+                'post_status' => $existing->post_status,
+                'edit_url' => get_edit_post_link($existing->ID, 'raw'),
+                'view_url' => get_permalink($existing->ID)
+            ));
+        } else {
+            wp_send_json_success(array('exists' => false));
+        }
+    }
+    
+    public function ajax_import_businesses_csv() {
+        check_ajax_referer('pseo_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied');
+        }
+        
+        wp_send_json_success(array('message' => 'Use the Import CSV page for bulk upload'));
+    }
+    
+    public function ajax_save_template() {
+        check_ajax_referer('pseo_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permission denied');
+        }
+        
+        wp_send_json_success(array('message' => 'Use the Templates page to save templates'));
+    }
+    
     private function build_post_content($data) {
-        $opening = $data['opening'];
-        $closing = $data['closing'];
         $city = $data['city'];
         $service_name = $data['service_name'];
         $service_slug = $data['service_slug'];
+        
+        // Get custom templates or use defaults
+        $opening_template = get_option('pseo_template_opening', $this->get_default_template_opening());
+        $why_template = get_option('pseo_template_why_section', $this->get_default_template_why());
+        $tips_template = get_option('pseo_template_tips_section', $this->get_default_template_tips());
+        $closing_template = get_option('pseo_template_closing', $this->get_default_template_closing());
+        $faq_enabled = get_option('pseo_template_faq_enabled', true);
+        
+        // Replace placeholders
+        $placeholders = array(
+            '{city_name}' => $city->city_name,
+            '{city_slug}' => $city->city_slug,
+            '{service_name}' => $service_name,
+            '{service_slug}' => $service_slug,
+            '{province}' => $city->province
+        );
+        
+        $opening = !empty($data['opening']) ? $data['opening'] : strtr($opening_template, $placeholders);
+        $closing = !empty($data['closing']) ? $data['closing'] : strtr($closing_template, $placeholders);
+        $why_content = strtr($why_template, $placeholders);
+        $tips_content = strtr($tips_template, $placeholders);
         
         $content = '';
         
@@ -1495,21 +2026,7 @@ class Programmatic_SEO {
         
         $content .= "\n\n";
         
-        $content .= '<!-- wp:paragraph -->';
-        $content .= '<p>' . esc_html($city->city_name) . ' memiliki berbagai penyedia jasa ' . esc_html($service_name) . ' yang berkualitas. Berikut adalah beberapa alasan mengapa Anda harus memilih layanan di kota ini:</p>';
-        $content .= '<!-- /wp:paragraph -->';
-        
-        $content .= "\n\n";
-        
-        $content .= '<!-- wp:list -->';
-        $content .= '<ul>';
-        $content .= '<li>Teknisi berpengalaman dan tersertifikasi</li>';
-        $content .= '<li>Harga kompetitif dan transparan</li>';
-        $content .= '<li>Layanan cepat dan responsif</li>';
-        $content .= '<li>Garansi pelayanan terbaik</li>';
-        $content .= '<li>Tersedia layanan darurat 24 jam</li>';
-        $content .= '</ul>';
-        $content .= '<!-- /wp:list -->';
+        $content .= wp_kses_post($why_content);
         
         $content .= "\n\n";
         
@@ -1520,23 +2037,18 @@ class Programmatic_SEO {
         
         $content .= "\n\n";
         
-        $content .= '<!-- wp:paragraph -->';
-        $content .= '<p>Untuk mendapatkan layanan terbaik, perhatikan tips berikut saat memilih penyedia jasa:</p>';
-        $content .= '<!-- /wp:paragraph -->';
+        $content .= wp_kses_post($tips_content);
         
         $content .= "\n\n";
         
-        $content .= '<!-- wp:list {"ordered":true} -->';
-        $content .= '<ol>';
-        $content .= '<li>Periksa review dan rating dari pelanggan sebelumnya</li>';
-        $content .= '<li>Pastikan teknisi memiliki sertifikasi resmi</li>';
-        $content .= '<li>Tanyakan tentang garansi yang diberikan</li>';
-        $content .= '<li>Bandingkan harga dari beberapa penyedia jasa</li>';
-        $content .= '<li>Pilih yang menawarkan layanan purna jual</li>';
-        $content .= '</ol>';
-        $content .= '<!-- /wp:list -->';
-        
-        $content .= "\n\n";
+        // FAQ Section (if enabled)
+        if ($faq_enabled) {
+            $content .= '<!-- wp:shortcode -->';
+            $content .= '[faq_schema city="' . esc_attr($city->city_slug) . '"]';
+            $content .= '<!-- /wp:shortcode -->';
+            
+            $content .= "\n\n";
+        }
         
         // Closing
         $content .= '<!-- wp:paragraph -->';
